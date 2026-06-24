@@ -11,6 +11,9 @@ print("⏳ جاري تحميل الموديل...")
 model = joblib.load('price_model.pkl')
 with open('model_maps.json', encoding='utf-8') as f:
     maps = json.load(f)
+    print("MAE =", maps['mae'])
+print("R2 =", maps['r2'])
+
 
 street_map    = maps['street_map']
 direction_map = maps['direction_map']
