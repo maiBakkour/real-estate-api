@@ -9,15 +9,16 @@ app = Flask(__name__)
 print("⏳ جاري تحميل الموديل...")
 
 model = joblib.load('price_model.pkl')
+
 with open('model_maps.json', encoding='utf-8') as f:
     maps = json.load(f)
-    print("MAE =", maps['mae'])
-print("R2 =", maps['r2'])
 
-
-street_map    = maps['street_map']
-direction_map = maps['direction_map']
-mae           = maps['mae']
+street_price      = maps['street_price']
+direction_price   = maps['direction_price']
+street_ppsqm      = maps['street_ppsqm']
+direction_num_map = maps['direction_num_map']
+mae               = maps['mae']
+mean_price        = maps['mean_price']
 
 condition_map = {'ضعيف': 0, 'وسط': 1, 'جيد': 2, 'ممتاز': 3}
 
@@ -29,31 +30,51 @@ def predict():
     try:
         data = request.get_json()
 
-        street_enc    = street_map.get(data['street'], np.mean(list(street_map.values())))
-        direction_enc = direction_map.get(data['direction'], np.mean(list(direction_map.values())))
-        condition_num = condition_map.get(data['condition'], 1)
+        area          = float(data['area'])
+        rooms         = int(data['rooms'])
+        bathrooms     = int(data['bathrooms'])
+        floor         = int(data['floor'])
+        condition     = data['condition']       # ضعيف | وسط | جيد | ممتاز
+        street        = data['street']          # وردشان | الفندق | الدرويش | النورس | الأنوار
+        direction     = data['direction']       # شمالي | جنوبي | شرقي | غربي
+        is_front      = bool(data['is_front'])
+        has_parking   = bool(data['has_parking'])
+        has_elevator  = bool(data['has_elevator'])
+        age           = int(data.get('age', 20))
+        apts_floor    = int(data.get('apts_floor', 4))
+
+        # Encoding
+        street_enc    = street_price.get(street, mean_price)
+        direction_enc = direction_price.get(direction, mean_price)
+        ppsqm         = street_ppsqm.get(street, mean_price / 120)
+        expected      = area * ppsqm
+        direction_num = direction_num_map.get(direction, 0)
+        condition_num = condition_map.get(condition, 1)
 
         input_df = pd.DataFrame([{
-            'المساحة (م2)'  : float(data['area']),
-            'عدد الغرف'     : int(data['rooms']),
-            'عدد الحمامات'  : int(data['bathrooms']),
-            'floor_num'     : int(data['floor']),
-            'condition_num' : condition_num,
-            'parking_num'   : 1 if data['has_parking']  else 0,
-            'elevator_num'  : 1 if data['has_elevator'] else 0,
-            'front_num'     : 1 if data['is_front']     else 0,
-            'age'           : int(data.get('age', 20)),
-            'apts_floor'    : int(data.get('apts_floor', 4)),
-            'street_enc'    : street_enc,
-            'direction_enc' : direction_enc,
+            'expected_price'        : expected,
+            'المساحة (م2)'          : area,
+            'street_ppsqm'          : ppsqm,
+            'street_enc'            : street_enc,
+            'عدد الغرف'             : rooms,
+            'عدد الحمامات'          : bathrooms,
+            'الإكساء (رقم)'         : condition_num,
+            'الوجهة (رقم)'          : 1 if is_front else 0,
+            'الاتجاه_رقم'           : direction_num,
+            'direction_enc'         : direction_enc,
+            'الطابق (رقم)'          : floor,
+            'عمر البناء (سنة)'      : age,
+            'عدد الشقق في كل طابق'  : apts_floor,
+            'وجود مصعد (رقم)'       : 1 if has_elevator else 0,
+            'موقف سيارة (رقم)'      : 1 if has_parking else 0,
         }])
 
-        predicted = model.predict(input_df)[0]
+        predicted = float(model.predict(input_df)[0])
 
         return jsonify({
-            'predicted_price': round(float(predicted), 0),
-            'min_price'      : round(float(predicted - mae), 0),
-            'max_price'      : round(float(predicted + mae), 0),
+            'predicted_price': round(predicted, 0),
+            'min_price'      : round(predicted - mae, 0),
+            'max_price'      : round(predicted + mae, 0),
         })
 
     except Exception as e:
@@ -62,7 +83,7 @@ def predict():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'r2': maps['r2'], 'mae': mae})
 
 
 if __name__ == '__main__':
