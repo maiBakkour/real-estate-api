@@ -9,7 +9,6 @@ app = Flask(__name__)
 print("⏳ جاري تحميل الموديل...")
 
 model = joblib.load('price_model.pkl')
-
 with open('model_maps.json', encoding='utf-8') as f:
     maps = json.load(f)
 
@@ -30,20 +29,19 @@ def predict():
     try:
         data = request.get_json()
 
-        area          = float(data['area'])
-        rooms         = int(data['rooms'])
-        bathrooms     = int(data['bathrooms'])
-        floor         = int(data['floor'])
-        condition     = data['condition']       # ضعيف | وسط | جيد | ممتاز
-        street        = data['street']          # وردشان | الفندق | الدرويش | النورس | الأنوار
-        direction     = data['direction']       # شمالي | جنوبي | شرقي | غربي
-        is_front      = bool(data['is_front'])
-        has_parking   = bool(data['has_parking'])
-        has_elevator  = bool(data['has_elevator'])
-        age           = int(data.get('age', 20))
-        apts_floor    = int(data.get('apts_floor', 4))
+        area         = float(data['area'])
+        rooms        = int(data['rooms'])
+        bathrooms    = int(data['bathrooms'])
+        floor        = int(data['floor'])
+        condition    = data['condition']
+        street       = data['street']
+        direction    = data['direction'].strip()
+        is_front     = bool(data['is_front'])
+        has_parking  = bool(data['has_parking'])
+        has_elevator = bool(data['has_elevator'])
+        age          = int(data.get('age', 20))
+        apts_floor   = int(data.get('apts_floor', 4))
 
-        # Encoding
         street_enc    = street_price.get(street, mean_price)
         direction_enc = direction_price.get(direction, mean_price)
         ppsqm         = street_ppsqm.get(street, mean_price / 120)
@@ -52,21 +50,21 @@ def predict():
         condition_num = condition_map.get(condition, 1)
 
         input_df = pd.DataFrame([{
-            'expected_price'        : expected,
-            'المساحة (م2)'          : area,
-            'street_ppsqm'          : ppsqm,
-            'street_enc'            : street_enc,
-            'عدد الغرف'             : rooms,
-            'عدد الحمامات'          : bathrooms,
-            'الإكساء (رقم)'         : condition_num,
-            'الوجهة (رقم)'          : 1 if is_front else 0,
-            'الاتجاه_رقم'           : direction_num,
-            'direction_enc'         : direction_enc,
-            'الطابق (رقم)'          : floor,
-            'عمر البناء (سنة)'      : age,
-            'عدد الشقق في كل طابق'  : apts_floor,
-            'وجود مصعد (رقم)'       : 1 if has_elevator else 0,
-            'موقف سيارة (رقم)'      : 1 if has_parking else 0,
+            'expected_price': expected,
+            'المساحة (م2)'  : area,
+            'street_ppsqm'  : ppsqm,
+            'street_enc'    : street_enc,
+            'عدد الغرف'     : rooms,
+            'عدد الحمامات'  : bathrooms,
+            'condition_num' : condition_num,
+            'front_num'     : 1 if is_front else 0,
+            'direction_num' : direction_num,
+            'direction_enc' : direction_enc,
+            'floor_num'     : floor,
+            'age'           : age,
+            'apts_floor'    : apts_floor,
+            'elevator_num'  : 1 if has_elevator else 0,
+            'parking_num'   : 1 if has_parking else 0,
         }])
 
         predicted = float(model.predict(input_df)[0])
@@ -83,7 +81,12 @@ def predict():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'r2': maps['r2'], 'mae': mae})
+    return jsonify({
+        'status'  : 'ok',
+        'r2'      : maps['r2'],
+        'mae'     : mae,
+        'version' : '3.0'
+    })
 
 
 if __name__ == '__main__':
